@@ -1,0 +1,447 @@
+# Get started with expectr
+
+Statistical production code lives or dies on small assumptions: no
+duplicate units, no negative amounts, no person with two addresses at
+once. A full validation framework such as pointblank or validate is
+often more ceremony than the job needs. The alternative is a
+*checkpoint*: one line that states the assumption and stops the pipeline
+(or shouts) the moment it breaks.
+
+The pattern is always the same:
+
+> **Express the rule as “the set of violations must be empty”, build
+> that set with ordinary dplyr, and pass it to a checkpoint.**
+
+The rule language is just dplyr, so there is nothing new to learn. The
+package only adds checkpoints for the rules that are awkward to write as
+a [`filter()`](https://rdrr.io/r/stats/filter.html): unique keys,
+balanced panels and overlapping spells. All of them are common in
+register data.
+
+| Function                                                                                   | The rule                                         | Returns       |
+|--------------------------------------------------------------------------------------------|--------------------------------------------------|---------------|
+| [`expect_empty()`](https://dataniel.github.io/expectr/reference/expect_empty.md)           | the data frame you pass has no rows              | the input     |
+| [`expect_none()`](https://dataniel.github.io/expectr/reference/expect_none.md)             | no row matches a condition                       | the full data |
+| [`expect_unique()`](https://dataniel.github.io/expectr/reference/expect_unique.md)         | the key columns identify each row                | the full data |
+| [`expect_balanced()`](https://dataniel.github.io/expectr/reference/expect_balanced.md)     | every unit is observed in every period           | the full data |
+| [`expect_no_overlap()`](https://dataniel.github.io/expectr/reference/expect_no_overlap.md) | a unit’s spells do not overlap                   | the full data |
+| [`tally_violations()`](https://dataniel.github.io/expectr/reference/tally_violations.md)   | counts violations for many rules, judges nothing | a tally       |
+
+Two helpers inspect data before you decide on a rule:
+[`flag_duplicates()`](https://dataniel.github.io/expectr/reference/flag_duplicates.md)
+marks duplicated keys, and
+[`view_types()`](https://dataniel.github.io/expectr/reference/view_types.md)
+compares column types across data frames.
+
+## The checkpoint: `expect_empty()`
+
+[`expect_empty()`](https://dataniel.github.io/expectr/reference/expect_empty.md)
+succeeds when the data frame it receives has zero rows. Filter for the
+rows that *should not exist*, and pipe them in:
+
+``` r
+starwars |>
+  filter(height < 0) |>
+  expect_empty(warn_msg = "Negative heights")
+#> ✔ Check passed: Negative heights
+```
+
+When violations exist you choose the severity. The default is a warning,
+which lets the pipeline continue but leaves a visible trace. The message
+says how many rows broke the rule and shows the first few:
+
+``` r
+mtcars |>
+  filter(mpg > 30) |>
+  expect_empty(warn_msg = "Suspiciously fuel-efficient cars")
+#> Warning in expect_empty(filter(mtcars, mpg > 30), warn_msg = "Suspiciously fuel-efficient cars"): Suspiciously fuel-efficient cars
+#> ℹ 4 rows found:
+#>       mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb
+#>     <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
+#>   1  32.4     4  78.7    66  4.08  2.2   19.5     1     1     4     1
+#>   2  30.4     4  75.7    52  4.93  1.62  18.5     1     1     4     2
+#>   3  33.9     4  71.1    65  4.22  1.84  19.9     1     1     4     1
+#>   4  30.4     4  95.1   113  3.77  1.51  16.9     1     1     5     2
+```
+
+For assumptions the rest of the pipeline depends on, escalate to a hard
+stop with `abort_msg`:
+
+``` r
+df |>
+  filter(is.na(id)) |>
+  expect_empty(abort_msg = "Rows without an id, cannot continue")
+#> Error in `expect_empty()`:
+#> ! Rows without an id, cannot continue
+#> ℹ 2 rows found:
+#>      id amount
+#>   <dbl>  <dbl>
+#> 1    NA    120
+#> 2    NA     -4
+```
+
+Messages are shown literally, so a regular expression such as
+`"CVR must match ^\\d{8}$"` is safe in a message.
+
+The message only shows the first five rows. To keep all of them, write
+them to a CSV file with `dump` (see *Unattended pipelines* below), or
+run the rule’s own [`filter()`](https://rdrr.io/r/stats/filter.html)
+when you want them in the session. The rows are deliberately not kept in
+memory after the check: on a population register a failed check can hold
+millions of rows.
+
+## Checks in the middle of a pipeline: `expect_none()`
+
+[`expect_empty()`](https://dataniel.github.io/expectr/reference/expect_empty.md)
+returns what it was given, which after a
+[`filter()`](https://rdrr.io/r/stats/filter.html) is the (empty)
+violation set. That ends the pipeline.
+[`expect_none()`](https://dataniel.github.io/expectr/reference/expect_none.md)
+takes the condition itself and returns the *full* data, so checks can be
+chained before the real work continues:
+
+``` r
+starwars |>
+  expect_none(height < 0) |>
+  expect_none(mass > 1000, warn_msg = "Unrealistic mass") |>
+  count(species, sort = TRUE) |>
+  head(3)
+#> ✔ No rows where height < 0
+#> Warning in expect_none(expect_none(starwars, height < 0), mass > 1000, warn_msg = "Unrealistic mass"): Unrealistic mass
+#> ℹ 1 row found:
+#>     name    height  mass hair_color skin_color eye_color birth_year sex   gender
+#>     <chr>    <int> <dbl> <chr>      <chr>      <chr>          <dbl> <chr> <chr>
+#>   1 Jabba …    175  1358 NA         green-tan… orange           600 herm… mascu…
+#>   # ℹ 5 more variables: homeworld <chr>, species <chr>, films <list>,
+#>   #   vehicles <list>, starships <list>
+#> # A tibble: 3 × 2
+#>   species     n
+#>   <chr>   <int>
+#> 1 Human      35
+#> 2 Droid       6
+#> 3 NA          4
+```
+
+Without a message, the condition itself becomes one, which is often
+enough during exploration. Give checks that stay in production a message
+in your own words.
+
+The condition follows [`filter()`](https://rdrr.io/r/stats/filter.html)
+semantics: a row where it is `NA` is not a violation. `mass > 1000` does
+not flag characters with unknown mass; test for missing values
+explicitly with [`is.na()`](https://rdrr.io/r/base/NA.html) when they
+matter.
+
+## Anything dplyr can express is a rule
+
+Some checkpoints from register work:
+
+``` r
+# Identifiers must look right (a missing cvr is a separate rule)
+df |>
+  expect_none(!is.na(cvr) & !grepl("^\\d{8}$", cvr),
+              abort_msg = "Malformed CVR numbers")
+
+# CPR numbers must hold a real date of birth (add_cpr_info() is from daos)
+df |>
+  daos::add_cpr_info(cpr, valid) |>
+  expect_none(!valid, warn_msg = "Invalid CPR numbers")
+
+# Spells must not end before they start
+spells |>
+  expect_none(end < start, abort_msg = "Spells ending before they start")
+
+# Amounts must reconcile within tolerance
+df |>
+  expect_none(abs(total - rowSums(across(starts_with("post_")))) > 1,
+              warn_msg = "Totals do not reconcile")
+
+# Categorical values must be in the codebook
+df |>
+  expect_none(!branche %in% codebook$branche, abort_msg = "Unknown industry codes")
+
+# Every expected unit must be present (anti-join as violation set)
+expected |>
+  anti_join(df, by = "cvr") |>
+  expect_empty(warn_msg = "Units missing from the delivery")
+```
+
+## Keys: `expect_unique()`
+
+Duplicate keys are the most common error in register data, and the most
+costly one sits right before a join. A lookup table with a duplicated
+key makes `left_join()` multiply rows without a word. Check the key
+first:
+
+``` r
+df <- tibble(
+  cvr  = c("11111111", "22222222", "11111111"),
+  year = c(2024, 2024, 2024)
+)
+
+df |>
+  expect_unique(cvr, year, warn_msg = "Duplicate company-years")
+#> Warning in expect_unique(df, cvr, year, warn_msg = "Duplicate company-years"): Duplicate company-years
+#> ℹ 2 rows in 1 group:
+#>     dupid cvr       year
+#>     <int> <chr>    <dbl>
+#>   1     1 11111111  2024
+#>   2     1 11111111  2024
+```
+
+The reported rows carry the `dupid` from
+[`flag_duplicates()`](https://dataniel.github.io/expectr/reference/flag_duplicates.md),
+so the copies in each group sit together. Outside of checkpoints,
+[`flag_duplicates()`](https://dataniel.github.io/expectr/reference/flag_duplicates.md)
+is the tool for *inspecting* duplicates before deciding what to do with
+them.
+
+## Panels: `expect_balanced()`
+
+A yearly register extract is a panel: one row per person (or company)
+and year. Whether it is *balanced*, every unit present in every year,
+decides which methods are valid and often reveals a broken extract.
+
+``` r
+panel <- tibble(
+  cpr  = c("a", "a", "a", "b", "b", "c"),
+  year = c(2020, 2021, 2022, 2020, 2022, 2022)
+)
+
+expect_balanced(panel, cpr, year)
+#> Warning in expect_balanced(panel, cpr, year): Panel is not balanced: missing cpr-year combinations
+#> ℹ 3 rows found:
+#>     cpr    year
+#>     <chr> <dbl>
+#>   1 b      2021
+#>   2 c      2020
+#>   3 c      2021
+```
+
+Real populations are rarely balanced. People are born, die and migrate.
+What usually *should* hold is that a unit, once present, does not skip a
+year before it leaves. `gaps_only = TRUE` checks that: `c` entering in
+2022 is fine, `b` missing in 2021 is not.
+
+``` r
+expect_balanced(panel, cpr, year, gaps_only = TRUE)
+#> Warning in expect_balanced(panel, cpr, year, gaps_only = TRUE): Gaps in panel: missing cpr-year combinations
+#> ℹ 1 row found:
+#>     cpr    year
+#>     <chr> <dbl>
+#>   1 b      2021
+```
+
+By default the expected years are those found in the data, so a year
+that was never loaded goes unnoticed. State the years you expect to
+catch that as well:
+
+``` r
+expect_balanced(panel, cpr, year, periods = 2015:2024, gaps_only = TRUE)
+```
+
+## Spells: `expect_no_overlap()`
+
+The other shape of register data is spells: address periods, employment,
+benefit periods. A person has only one address at a time, so overlapping
+spells within a person are an error:
+
+``` r
+addresses <- tibble(
+  cpr   = c("a", "a", "b", "b"),
+  start = as.Date(c("2020-01-01", "2021-01-01", "2020-01-01", "2020-06-01")),
+  end   = as.Date(c("2020-12-31", NA,           "2020-06-30", "2021-12-31"))
+)
+
+expect_no_overlap(addresses, cpr, start, end)
+#> Warning in expect_no_overlap(addresses, cpr, start, end): Overlapping spells per cpr
+#> ℹ 2 rows in 1 group:
+#>     overlap_id cpr   start      end
+#>          <int> <chr> <date>     <date>
+#>   1          1 b     2020-01-01 2020-06-30
+#>   2          1 b     2020-06-01 2021-12-31
+```
+
+Spells are closed intervals, and a missing end means the spell is
+ongoing. The reported rows carry an `overlap_id` that groups spells
+overlapping each other, the same idea as `dupid`. As in every checkpoint
+with a key, the columns the rule is about come first, so a wide data
+frame cuts its other columns from the message, not these.
+
+## Column types: `view_types()` + `expect_empty()`
+
+Joins and row-binds have their own silent failure mode: the same column
+arriving as `chr` in one data frame and `dbl` in the next.
+[`view_types()`](https://dataniel.github.io/expectr/reference/view_types.md)
+shows the type of every column across several data frames at once:
+
+``` r
+df_a <- tibble(cvr = "11111111", amount = 100,   year = 2024L)
+df_b <- tibble(cvr = 22222222,  amount = "100", note = "ok")
+
+view_types(df_a, df_b)
+#> # A tibble: 4 × 4
+#>   column status   df_a  df_b 
+#>   <chr>  <chr>    <chr> <chr>
+#> 1 cvr    conflict chr   dbl  
+#> 2 amount conflict dbl   chr  
+#> 3 year   missing  int   NA   
+#> 4 note   missing  NA    chr
+```
+
+The `status` column separates real conflicts from harmless differences
+(`coercible` types such as `int` + `dbl`, or a column `missing` from one
+frame). With `diff = TRUE` only the conflicts remain, so frames that
+bind produce an *empty* result, ready for a checkpoint:
+
+``` r
+view_types(df_a, df_b, diff = TRUE) |>
+  expect_empty(warn_msg = "Column types differ between df_a and df_b")
+#> Warning in expect_empty(view_types(df_a, df_b, diff = TRUE), warn_msg = "Column types differ between df_a and df_b"): Column types differ between df_a and df_b
+#> ℹ 2 rows found:
+#>     column status   df_a  df_b
+#>     <chr>  <chr>    <chr> <chr>
+#>   1 cvr    conflict chr   dbl
+#>   2 amount conflict dbl   chr
+```
+
+## Many rules at once: `tally_violations()`
+
+A chain of checkpoints stops at the first abort. When a delivery has
+five problems, you want to hear about all five in one go, not one per
+run.
+
+To *tally* is to keep count, as with tally marks or
+[`dplyr::tally()`](https://dplyr.tidyverse.org/reference/count.html).
+That is the whole idea of
+[`tally_violations()`](https://dataniel.github.io/expectr/reference/tally_violations.md):
+it evaluates every rule and counts the violating rows, but never warns
+or stops. Counting and judging are kept apart. The `expect_*()`
+functions judge; the tally only counts, and severity is decided
+afterwards.
+
+``` r
+report <- starwars |>
+  tally_violations(
+    "Missing species"   = is.na(species),
+    "Taller than 2.5 m" = height > 250,
+    "Heavier than 1 t"  = mass > 1000,
+    "Negative height"   = height < 0
+  )
+report
+#> # A tibble: 4 × 3
+#>   rule                  n rows     
+#>   <chr>             <int> <list>   
+#> 1 Missing species       4 <int [4]>
+#> 2 Taller than 2.5 m     1 <int [1]>
+#> 3 Heavier than 1 t      1 <int [1]>
+#> 4 Negative height       0 <int [0]>
+```
+
+The `rows` column holds the row numbers of each rule’s violations, for
+`starwars[report$rows[[1]], ]`. Filtered to the rules that failed, the
+tally is itself a violation set, so it goes straight into a checkpoint:
+
+``` r
+report |>
+  filter(n > 0) |>
+  expect_empty(warn_msg = "The data failed validation")
+#> Warning in expect_empty(filter(report, n > 0), warn_msg = "The data failed validation"): The data failed validation
+#> ℹ 3 rows found:
+#>     rule                  n rows
+#>     <chr>             <int> <list>
+#>   1 Missing species       4 <int [4]>
+#>   2 Taller than 2.5 m     1 <int [1]>
+#>   3 Heavier than 1 t      1 <int [1]>
+```
+
+Kept unfiltered, it is a validation report that can be sent back to
+whoever made the data,
+e.g. `report |> select(-rows) |> daos::write_excel(...)`.
+
+## Unattended pipelines: log, dump and catch
+
+For pipelines that run unattended, every checkpoint can append a line to
+a log and write the offending rows to a CSV file. Set both once at the
+top of the script with options instead of repeating the paths in every
+check:
+
+``` r
+options(
+  expectr.log  = format(Sys.time(), "log/%Y%m%d_%H%M%S_checks.log"),
+  expectr.dump = "log/violations"
+)
+
+df |>
+  expect_none(is.na(id), abort_msg = "NA ids") |>
+  expect_none(amount < 0, warn_msg = "Negative amounts") |>
+  expect_unique(id, year, warn_msg = "Duplicate person-years")
+```
+
+    2026-06-11 09:00:03 | ✔ | Check passed: NA ids | 0 rows
+    2026-06-11 09:00:03 | ! | Negative amounts | 3 rows | log/violations/20260611_090003_Negative_amounts.csv
+    2026-06-11 09:00:04 | ✔ | Check passed: Duplicate person-years | 0 rows
+
+Each check that ran is named in the log, failures say how many rows
+broke the rule, and the rows themselves are waiting in the dump
+directory. The CSV files are written with a byte order mark, so Excel
+shows æ, ø and å correctly.
+
+A failed check signals a condition of class `expectr_failure` that
+carries the offending rows in `$violations`. Code that should react to a
+failure, rather than just stop, can catch it:
+
+``` r
+tryCatch(
+  df |> expect_none(is.na(id), abort_msg = "NA ids"),
+  expectr_failure = \(e) {
+    saveRDS(e$violations, "na_ids.rds")
+    stop(e)
+  }
+)
+```
+
+## Data too large for memory: DuckDB and Arrow
+
+Every checkpoint, and
+[`tally_violations()`](https://dataniel.github.io/expectr/reference/tally_violations.md),
+also takes a database table from dbplyr, such as DuckDB, and an Arrow
+table or dataset. The check runs where the data lives: the violation set
+is a query, and only its size and the first rows travel into R. Arrow
+data goes through DuckDB.
+
+``` r
+con <- DBI::dbConnect(duckdb::duckdb(), "register.duckdb")
+
+tbl(con, "persons") |>
+  expect_none(is.na(cpr), abort_msg = "Persons without a cpr") |>
+  expect_unique(cpr, year) |>
+  expect_balanced(cpr, year, gaps_only = TRUE)
+
+arrow::open_dataset("register/") |>
+  tally_violations(
+    "Missing cpr"     = is.na(cpr),
+    "Negative income" = income < 0
+  )
+```
+
+Each checkpoint returns the table unevaluated, so the pipeline stays in
+the database. A failure carries its violation set as a query in
+`$violations`; `collect()` fetches the rows, and `dump` writes them all
+to a CSV file. A database has no row order, so `dupid` follows the key
+rather than first appearance, and
+[`tally_violations()`](https://dataniel.github.io/expectr/reference/tally_violations.md)
+has no `rows` column.
+
+For data that fits in memory, the in-memory checks are fast as well:
+they group keys such as cpr in one linear pass instead of sorting them,
+and check a million persons over five years in under a second.
+
+## The habit behind it
+
+`daos::read_files()` follows the same philosophy: every path is
+validated before a single file is opened, and all the missing or
+unreadable ones are reported together rather than one abort at a time.
+If you adopt one habit from this article, make it that one: validate
+*before* you write output, and make the empty set the definition of
+success.
