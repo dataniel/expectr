@@ -49,8 +49,8 @@ expect_unique <- function(data, ...,
                           success_msg = NULL,
                           warn_msg    = NULL,
                           abort_msg   = NULL,
-                          log         = getOption("daos.check_log"),
-                          dump        = getOption("daos.check_dump")) {
+                          log         = getOption("expectr.log"),
+                          dump        = getOption("expectr.dump")) {
 
   tbl <- check_table(data)
   key_cols <- if (...length() > 0) select_names(tbl, ...)

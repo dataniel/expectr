@@ -32,7 +32,7 @@ is_remote <- function(data) !is.data.frame(data)
 select_names <- function(data, ...) colnames(dplyr::select(data, ...))
 
 remote_nrow <- function(x) {
-  n <- dplyr::pull(dplyr::summarise(dplyr::ungroup(x), .daos_n = dplyr::n()))
+  n <- dplyr::pull(dplyr::summarise(dplyr::ungroup(x), .expectr_n = dplyr::n()))
   as.numeric(n)
 }
 
@@ -74,24 +74,24 @@ remote_panel_gaps <- function(tbl, ids, time_col, periods, gaps_only) {
     periods <- sort(unique(periods))
     obs <- dplyr::filter(obs, .data[[time_col]] %in% !!periods)
   }
-  per <- tibble::tibble(!!time_col := periods, .daos_pos = seq_along(periods))
+  per <- tibble::tibble(!!time_col := periods, .expectr_pos = seq_along(periods))
   per <- dbplyr::copy_inline(dbplyr::remote_con(tbl), per)
   obs <- dplyr::inner_join(dplyr::distinct(obs), per, by = time_col)
 
   units <- obs |>
     dplyr::group_by(!!!rlang::syms(ids)) |>
-    dplyr::summarise(.daos_n  = dplyr::n(),
-                     .daos_lo = min(.data$.daos_pos, na.rm = TRUE),
-                     .daos_hi = max(.data$.daos_pos, na.rm = TRUE),
+    dplyr::summarise(.expectr_n  = dplyr::n(),
+                     .expectr_lo = min(.data$.expectr_pos, na.rm = TRUE),
+                     .expectr_hi = max(.data$.expectr_pos, na.rm = TRUE),
                      .groups = "drop")
   if (!gaps_only) {
-    units <- dplyr::mutate(units, .daos_lo = 1L, .daos_hi = !!length(periods))
+    units <- dplyr::mutate(units, .expectr_lo = 1L, .expectr_hi = !!length(periods))
   }
 
   units |>
-    dplyr::filter(.data$.daos_n < .data$.daos_hi - .data$.daos_lo + 1L) |>
+    dplyr::filter(.data$.expectr_n < .data$.expectr_hi - .data$.expectr_lo + 1L) |>
     dplyr::cross_join(per) |>
-    dplyr::filter(.data$.daos_pos >= .data$.daos_lo, .data$.daos_pos <= .data$.daos_hi) |>
+    dplyr::filter(.data$.expectr_pos >= .data$.expectr_lo, .data$.expectr_pos <= .data$.expectr_hi) |>
     dplyr::select(dplyr::all_of(c(ids, time_col))) |>
     dplyr::anti_join(dplyr::select(obs, dplyr::all_of(c(ids, time_col))),
                      by = c(ids, time_col), na_matches = "na") |>
@@ -111,32 +111,32 @@ remote_overlaps <- function(tbl, ids, start_col, end_col) {
     dbplyr::window_order(!!start, !!end) |>
     dbplyr::window_frame(-Inf, -1) |>
     dplyr::mutate(
-      .daos_prev_end  = max(!!end, na.rm = TRUE),
-      .daos_prev_open = max(dplyr::if_else(is.na(!!end), 1L, 0L), na.rm = TRUE)
+      .expectr_prev_end  = max(!!end, na.rm = TRUE),
+      .expectr_prev_open = max(dplyr::if_else(is.na(!!end), 1L, 0L), na.rm = TRUE)
     ) |>
     dplyr::mutate(
-      .daos_new = dplyr::if_else(
-        dplyr::coalesce(.data$.daos_prev_open, 0L) == 1L, 0L,
-        dplyr::if_else(is.na(.data$.daos_prev_end) | !!start > .data$.daos_prev_end, 1L, 0L)
+      .expectr_new = dplyr::if_else(
+        dplyr::coalesce(.data$.expectr_prev_open, 0L) == 1L, 0L,
+        dplyr::if_else(is.na(.data$.expectr_prev_end) | !!start > .data$.expectr_prev_end, 1L, 0L)
       )
     ) |>
-    dplyr::mutate(.daos_grp = cumsum(.data$.daos_new)) |>
+    dplyr::mutate(.expectr_grp = cumsum(.data$.expectr_new)) |>
     # the frame would otherwise carry into n() below
     dbplyr::window_frame(-Inf, Inf) |>
-    dplyr::group_by(!!!rlang::syms(c(ids, ".daos_grp"))) |>
+    dplyr::group_by(!!!rlang::syms(c(ids, ".expectr_grp"))) |>
     dplyr::filter(dplyr::n() > 1L) |>
     dplyr::ungroup()
 
   spells |>
-    dplyr::mutate(overlap_id = !!sql_dense_rank(spells, c(ids, ".daos_grp"))) |>
-    dplyr::select(!dplyr::starts_with(".daos_")) |>
+    dplyr::mutate(overlap_id = !!sql_dense_rank(spells, c(ids, ".expectr_grp"))) |>
+    dplyr::select(!dplyr::starts_with(".expectr_")) |>
     sort_by(rlang::exprs(.data$overlap_id, !!start, !!end))
 }
 
 # The finders return their query unsorted, since a sorted query that is
 # counted or summarised makes dbplyr warn, and attach the sort order for
 # report_check() to apply when rows are fetched.
-sort_by <- function(query, order) structure(query, daos_order = order)
+sort_by <- function(query, order) structure(query, expectr_order = order)
 
 # Sort keys putting NULL first, as data.table sorts NA, for arrange(). The
 # CASE form works on every backend; NULLS FIRST does not (SQL Server).
@@ -152,7 +152,7 @@ remote_tally <- function(tbl, rules, call) {
   sums <- lapply(rules, function(rule) {
     rlang::quo(sum(dplyr::if_else(!!rule, 1L, 0L), na.rm = TRUE))
   })
-  names(sums) <- paste0(".daos_r", seq_along(rules))
+  names(sums) <- paste0(".expectr_r", seq_along(rules))
   counts <- tryCatch(
     dplyr::collect(dplyr::summarise(dplyr::ungroup(tbl), !!!sums)),
     error = function(e) {

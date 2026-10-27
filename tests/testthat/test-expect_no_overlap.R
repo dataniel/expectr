@@ -9,7 +9,7 @@ spells <- data.frame(
 )
 
 overlaps <- function(...) {
-  rlang::catch_cnd(expect_no_overlap(...), classes = "daos_check_failure")$violations
+  rlang::catch_cnd(expect_no_overlap(...), classes = "expectr_failure")$violations
 }
 
 test_that("overlapping spells are reported with a shared overlap_id", {
@@ -23,7 +23,7 @@ test_that("overlapping spells are reported with a shared overlap_id", {
 test_that("the rule's columns come first and groups are counted", {
   wide <- cbind(note = "x", spells, kom = 101L)
   cnd <- rlang::catch_cnd(expect_no_overlap(wide, cpr, start, end),
-                          classes = "daos_check_failure")
+                          classes = "expectr_failure")
   expect_equal(names(cnd$violations),
                c("overlap_id", "cpr", "start", "end", "note", "kom"))
   expect_match(conditionMessage(cnd), "5 rows in 2 groups")

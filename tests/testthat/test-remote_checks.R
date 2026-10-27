@@ -11,7 +11,7 @@ local_duck <- function(df, env = parent.frame()) {
 
 # The violations of a failing check, fetched into R
 violations_of <- function(expr) {
-  cnd <- rlang::catch_cnd(expr, classes = "daos_check_failure")
+  cnd <- rlang::catch_cnd(expr, classes = "expectr_failure")
   expect_false(is.null(cnd))
   v <- cnd$violations
   if (!is.data.frame(v)) v <- dplyr::collect(v)
@@ -29,7 +29,7 @@ test_that("expect_none() checks a database table and returns it unchanged", {
   expect_message(out <- expect_none(tbl, amount > 100), "No rows where amount > 100")
   expect_s3_class(out, "tbl_lazy")
 
-  cnd <- rlang::catch_cnd(expect_none(tbl, amount < 0), classes = "daos_check_failure")
+  cnd <- rlang::catch_cnd(expect_none(tbl, amount < 0), classes = "expectr_failure")
   expect_match(conditionMessage(cnd), "2 rows found")
   expect_s3_class(cnd$violations, "tbl_lazy")
   expect_equal(sort(dplyr::collect(cnd$violations)$amount), c(-5, -2))

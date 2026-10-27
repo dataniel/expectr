@@ -21,7 +21,7 @@ test_that("expect_none() derives messages from the condition", {
 test_that("user messages and abort work as in expect_empty()", {
   expect_message(expect_none(df, amount > 100, warn_msg = "Big"), "Check passed: Big")
   expect_error(expect_none(df, is.na(id), abort_msg = "NA ids"), "NA ids",
-               class = "daos_check_failure")
+               class = "expectr_failure")
 })
 
 test_that("NA in a condition is not a violation, as in filter()", {
@@ -30,7 +30,7 @@ test_that("NA in a condition is not a violation, as in filter()", {
 
 test_that("several conditions are combined with &", {
   cnd <- rlang::catch_cnd(expect_none(df, amount < 20, id > 0),
-                          classes = "daos_check_failure")
+                          classes = "expectr_failure")
   expect_equal(nrow(cnd$violations), 1)
   expect_match(conditionMessage(cnd), "amount < 20 & id > 0", fixed = TRUE)
 })

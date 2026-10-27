@@ -1,8 +1,8 @@
 ---
-title: "Lightweight data validation with checkpoints"
+title: "Get started with expectr"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Lightweight data validation with checkpoints}
+  %\VignetteIndexEntry{Get started with expectr}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,7 +12,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment  = "#>"
 )
-library(daos)
+library(expectr)
 library(dplyr, warn.conflicts = FALSE)
 ```
 
@@ -41,6 +41,10 @@ them are common in register data.
 | `expect_balanced()` | every unit is observed in every period | the full data |
 | `expect_no_overlap()` | a unit's spells do not overlap | the full data |
 | `tally_violations()` | counts violations for many rules, judges nothing | a tally |
+
+Two helpers inspect data before you decide on a rule: `flag_duplicates()`
+marks duplicated keys, and `view_types()` compares column types across
+data frames.
 
 ## The checkpoint: `expect_empty()`
 
@@ -116,13 +120,14 @@ test for missing values explicitly with `is.na()` when they matter.
 Some checkpoints from register work:
 
 ```{r, eval = FALSE}
-# Identifiers must look right (%like% preserves NA, unlike grepl)
+# Identifiers must look right (a missing cvr is a separate rule)
 df |>
-  expect_none(!cvr %like% "^\\d{8}$", abort_msg = "Malformed CVR numbers")
+  expect_none(!is.na(cvr) & !grepl("^\\d{8}$", cvr),
+              abort_msg = "Malformed CVR numbers")
 
-# CPR numbers must hold a real date of birth
+# CPR numbers must hold a real date of birth (add_cpr_info() is from daos)
 df |>
-  add_cpr_info(cpr, valid) |>
+  daos::add_cpr_info(cpr, valid) |>
   expect_none(!valid, warn_msg = "Invalid CPR numbers")
 
 # Spells must not end before they start
@@ -275,7 +280,7 @@ report |>
 ```
 
 Kept unfiltered, it is a validation report that can be sent back to
-whoever made the data: `report |> select(-rows) |> write_excel(...)`.
+whoever made the data, e.g. `report |> select(-rows) |> daos::write_excel(...)`.
 
 ## Unattended pipelines: log, dump and catch
 
@@ -285,8 +290,8 @@ of the script with options instead of repeating the paths in every check:
 
 ```{r, eval = FALSE}
 options(
-  daos.check_log  = f("log/{nowf()}_checks.log"),
-  daos.check_dump = "log/violations"
+  expectr.log  = format(Sys.time(), "log/%Y%m%d_%H%M%S_checks.log"),
+  expectr.dump = "log/violations"
 )
 
 df |>
@@ -306,14 +311,14 @@ the rule, and the rows themselves are waiting in the dump directory. The
 CSV files are written with a byte order mark, so Excel shows æ, ø and å
 correctly.
 
-A failed check signals a condition of class `daos_check_failure` that
+A failed check signals a condition of class `expectr_failure` that
 carries the offending rows in `$violations`. Code that should react to a
 failure, rather than just stop, can catch it:
 
 ```{r, eval = FALSE}
 tryCatch(
   df |> expect_none(is.na(id), abort_msg = "NA ids"),
-  daos_check_failure = \(e) {
+  expectr_failure = \(e) {
     saveRDS(e$violations, "na_ids.rds")
     stop(e)
   }
@@ -353,11 +358,10 @@ For data that fits in memory, the in-memory checks are fast as well:
 they group keys such as cpr in one linear pass instead of sorting them,
 and check a million persons over five years in under a second.
 
-## The same idea inside the package
+## The habit behind it
 
-`read_files()` uses exactly this philosophy internally: every path is
-validated before a single file is opened, and all the missing or
-unreadable ones are reported together rather than one abort at a time.
-If you adopt one habit from this article, make it that one: validate
-*before* you write output, and make the empty set the definition of
-success.
+`daos::read_files()` follows the same philosophy: every path is validated
+before a single file is opened, and all the missing or unreadable ones
+are reported together rather than one abort at a time. If you adopt one
+habit from this article, make it that one: validate *before* you write
+output, and make the empty set the definition of success.

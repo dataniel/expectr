@@ -67,8 +67,8 @@ expect_balanced <- function(data, id, time,
                             success_msg = NULL,
                             warn_msg    = NULL,
                             abort_msg   = NULL,
-                            log         = getOption("daos.check_log"),
-                            dump        = getOption("daos.check_dump")) {
+                            log         = getOption("expectr.log"),
+                            dump        = getOption("expectr.dump")) {
 
   tbl      <- check_table(data)
   ids      <- select_names(tbl, {{ id }})

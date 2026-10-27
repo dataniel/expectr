@@ -30,7 +30,7 @@
 #' ```
 #'
 #' Kept unfiltered, it is a validation report: send it back to whoever made
-#' the data, e.g. with [write_excel()] after dropping the `rows` column.
+#' the data, e.g. with `daos::write_excel()` after dropping the `rows` column.
 #'
 #' Rules follow [dplyr::filter()] semantics: each must give `TRUE` for a
 #' violating row, and `NA` counts as no violation. Rules are evaluated with
@@ -69,7 +69,7 @@ tally_violations <- function(data, ...) {
   if (is_remote(tbl)) return(remote_tally(tbl, rules, call))
   rows <- lapply(names(rules), function(name) {
     hit <- tryCatch(
-      dplyr::mutate(data, .daos_rule = !!rules[[name]], .keep = "none")$.daos_rule,
+      dplyr::mutate(data, .expectr_rule = !!rules[[name]], .keep = "none")$.expectr_rule,
       error = function(e) {
         cli::cli_abort("Rule {.val {name}} could not be evaluated.",
                        parent = e, call = call)

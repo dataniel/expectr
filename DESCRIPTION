@@ -1,0 +1,38 @@
+Package: expectr
+Title: Pipeline Checkpoints for Data Expectations
+Version: 0.1.0
+Authors@R: person("Daniel", "Madsen", email = "danielmadsen@live.dk",
+    role = c("aut", "cre"))
+Description: State an expectation about data as "the set of violations
+    must be empty", build that set with ordinary dplyr, and pass it to a
+    checkpoint that warns or aborts with the offending rows. Includes
+    checkpoints for unique keys, balanced panels and overlapping spells,
+    a tally of many rules at once, and helpers to inspect duplicates and
+    column types. Built for full-population registers: in-memory checks
+    group keys in one linear pass, and database and Arrow tables are
+    checked where they live.
+License: MIT + file LICENSE
+URL: https://dataniel.github.io/expectr, https://github.com/dataniel/expectr
+BugReports: https://github.com/dataniel/expectr/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports:
+    cli,
+    data.table,
+    dplyr,
+    rlang,
+    tibble
+Suggests:
+    arrow,
+    DBI,
+    dbplyr,
+    duckdb,
+    ggplot2,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+Config/Needs/website: pkgdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0

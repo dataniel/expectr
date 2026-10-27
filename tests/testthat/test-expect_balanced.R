@@ -5,7 +5,7 @@ panel <- data.frame(
 )
 
 violations <- function(...) {
-  rlang::catch_cnd(expect_balanced(...), classes = "daos_check_failure")$violations
+  rlang::catch_cnd(expect_balanced(...), classes = "expectr_failure")$violations
 }
 
 test_that("expect_balanced() lists every missing unit-period", {

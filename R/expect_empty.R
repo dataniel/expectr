@@ -14,14 +14,14 @@
 #' Messages are shown literally: braces are not interpolated, so regular
 #' expressions such as `"^\\d{8}$"` are safe to use in a message.
 #'
-#' A failed check signals a condition of class `daos_check_failure` (a warning
+#' A failed check signals a condition of class `expectr_failure` (a warning
 #' or an error) that carries the offending rows in its `violations` field.
 #' Scheduled pipelines can catch it and keep the rows:
 #'
 #' ```r
 #' tryCatch(
 #'   expect_empty(bad_rows, abort_msg = "Bad rows"),
-#'   daos_check_failure = \(e) saveRDS(e$violations, "bad_rows.rds")
+#'   expectr_failure = \(e) saveRDS(e$violations, "bad_rows.rds")
 #' )
 #' ```
 #'
@@ -34,8 +34,8 @@
 #'
 #' ```r
 #' options(
-#'   daos.check_log  = f("log/{nowf()}_checks.log"),
-#'   daos.check_dump = "log/violations"
+#'   expectr.log  = format(Sys.time(), "log/%Y%m%d_%H%M%S_checks.log"),
+#'   expectr.dump = "log/violations"
 #' )
 #' ```
 #'
@@ -85,10 +85,10 @@
 #'   message when `data` is not empty. If `NULL` (default), a warning is
 #'   issued instead.
 #' @param log Optional path to a log file. The directory is created
-#'   automatically. Defaults to `getOption("daos.check_log")`.
+#'   automatically. Defaults to `getOption("expectr.log")`.
 #' @param dump Optional directory. When the check fails, the offending rows
 #'   are written there as a timestamped CSV file (UTF-8 with BOM, so Excel
-#'   reads æøå correctly). Defaults to `getOption("daos.check_dump")`.
+#'   reads æøå correctly). Defaults to `getOption("expectr.dump")`.
 #'
 #' @return `data` invisibly.
 #'
@@ -108,7 +108,7 @@
 #'
 #' # With logging, set once for the whole script:
 #' \dontrun{
-#' options(daos.check_log = f("log/{nowf()}/checks.log"))
+#' options(expectr.log = "log/checks.log")
 #'
 #' dplyr::starwars |>
 #'   dplyr::filter(name == "Harry Potter") |>
@@ -117,15 +117,16 @@
 #'
 #' @seealso [expect_none()] to check a condition without leaving the
 #'   pipeline, [expect_unique()] for keys, [tally_violations()] to run many
-#'   rules at once, and [flag_duplicates()].
+#'   rules at once, [flag_duplicates()] to inspect duplicates, and
+#'   [view_types()] to compare column types.
 #'
 #' @export
 expect_empty <- function(data,
                          success_msg = NULL,
                          warn_msg    = "The dataset is not empty.",
                          abort_msg   = NULL,
-                         log         = getOption("daos.check_log"),
-                         dump        = getOption("daos.check_dump")) {
+                         log         = getOption("expectr.log"),
+                         dump        = getOption("expectr.dump")) {
 
   tbl <- check_table(data)
 
@@ -218,7 +219,7 @@ first_row_by <- function(group, n_groups) {
 }
 
 # Reports a violation set: success alert when empty, otherwise warning or
-# error of class `daos_check_failure` carrying the rows. `key` names the
+# error of class `expectr_failure` carrying the rows. `key` names the
 # columns the rule is about; they are moved to the front so a narrow console
 # cuts the other columns, not these. `group` names a column grouping the rows
 # (`dupid`, `overlap_id`), counted in the summary. `call` defaults to the
@@ -247,7 +248,7 @@ report_check <- function(violations, success_msg, fail_msg, abort,
 
   if (remote) {
     # Sorted only now, for the rows that are fetched; see sort_by()
-    order <- attr(violations, "daos_order")
+    order <- attr(violations, "expectr_order")
     violations <- dplyr::relocate(violations, dplyr::any_of(c(group, key)))
     if (length(order) > 0) violations <- dplyr::arrange(violations, !!!order)
     shown <- dplyr::collect(utils::head(violations, preview_n))
@@ -267,11 +268,11 @@ report_check <- function(violations, success_msg, fail_msg, abort,
           else "{n} row{?s} in {n_groups} group{?s}:",
     preview_rows(shown, n = preview_n),
     if (!is.null(dump_file)) c("i" = "All rows written to {.path {dump_file}}.")
-    else if (n > preview_n) c("i" = "Set {.arg dump} or {.code options(daos.check_dump = )} to write all rows to a CSV file.")
+    else if (n > preview_n) c("i" = "Set {.arg dump} or {.code options(expectr.dump = )} to write all rows to a CSV file.")
   )
 
   signal <- if (abort) cli::cli_abort else cli::cli_warn
-  signal(bullets, class = "daos_check_failure", violations = violations,
+  signal(bullets, class = "expectr_failure", violations = violations,
          call = call)
   invisible(FALSE)
 }
@@ -296,7 +297,7 @@ dump_violations <- function(violations, dump, msg) {
   if (is.null(dump)) return(NULL)
   dir.create(dump, recursive = TRUE, showWarnings = FALSE)
   slug <- substr(gsub("^_+|_+$", "", gsub("[^[:alnum:]]+", "_", msg)), 1, 60)
-  file <- file.path(dump, paste0(nowf("%Y%m%d_%H%M%S"), "_", slug, ".csv"))
+  file <- file.path(dump, paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_", slug, ".csv"))
   if (is_remote(violations)) violations <- dplyr::collect(violations)
   data.table::fwrite(violations, file, bom = TRUE)
   file

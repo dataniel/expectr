@@ -1,0 +1,43 @@
+url: https://dataniel.github.io/expectr
+
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left: [intro, reference]
+    right: [github]
+  components:
+    github:
+      icon: fab fa-github
+      href: https://github.com/dataniel/expectr
+
+home:
+  strip_header: true
+
+reference:
+  - title: Checkpoints
+    desc: >
+      State a rule as "the set of violations must be empty". Each
+      checkpoint warns or aborts with the offending rows and returns its
+      input, so it can sit in a pipeline.
+    contents:
+      - expect_empty
+      - expect_none
+      - expect_unique
+      - expect_balanced
+      - expect_no_overlap
+
+  - title: Counting and inspecting
+    desc: >
+      `tally_violations()` counts violations for many rules and judges
+      nothing; `flag_duplicates()` and `view_types()` inspect data before
+      you settle on a rule.
+    contents:
+      - tally_violations
+      - flag_duplicates
+      - view_types
+
+  - title: Package
+    contents:
+      - expectr-package

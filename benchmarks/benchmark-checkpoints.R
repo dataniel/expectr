@@ -5,7 +5,7 @@
 # speed-up (baseline-checkpoints.R, a frozen reference) with the current
 # code, in memory.
 pkgload::load_all(quiet = TRUE)
-baseline <- new.env(parent = asNamespace("daos"))
+baseline <- new.env(parent = asNamespace("expectr"))
 sys.source("benchmarks/baseline-checkpoints.R", baseline)
 options(cli.default_handler = function(...) invisible())
 set.seed(42)
@@ -37,7 +37,7 @@ inputs <- list(
 )
 
 violations <- function(expr) {
-  cnd <- rlang::catch_cnd(expr, classes = "daos_check_failure")
+  cnd <- rlang::catch_cnd(expr, classes = "expectr_failure")
   if (is.null(cnd)) return(NULL)
   tibble::as_tibble(cnd$violations)
 }
@@ -60,7 +60,7 @@ cases <- list(
 )
 
 rows <- list()
-current <- asNamespace("daos")
+current <- asNamespace("expectr")
 for (case in names(cases)) {
   f <- cases[[case]][[1]]
   x <- inputs[[cases[[case]][[2]]]]()

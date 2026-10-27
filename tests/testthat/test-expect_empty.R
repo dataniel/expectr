@@ -37,11 +37,11 @@ test_that("failure messages report the row count and preview rows", {
   cnd <- rlang::catch_cnd(expect_empty(big, warn_msg = "Many"))
   expect_match(conditionMessage(cnd), "12 rows found")
   expect_match(conditionMessage(cnd), "7 more rows")
-  expect_match(conditionMessage(cnd), "daos.check_dump", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "expectr.dump", fixed = TRUE)
 
   # All rows are shown, so there is nothing to point to
   few <- rlang::catch_cnd(expect_empty(data.frame(x = 1:3), warn_msg = "Few"))
-  expect_no_match(conditionMessage(few), "daos.check_dump", fixed = TRUE)
+  expect_no_match(conditionMessage(few), "expectr.dump", fixed = TRUE)
 })
 
 test_that("the preview keeps columns aligned and drops the tibble header", {
@@ -75,11 +75,11 @@ test_that("success message names the check when a message is given", {
 
 test_that("failures carry the violations in a classed condition", {
   df <- data.frame(x = 1:2)
-  w <- rlang::catch_cnd(expect_empty(df), classes = "daos_check_failure")
+  w <- rlang::catch_cnd(expect_empty(df), classes = "expectr_failure")
   expect_s3_class(w, "warning")
   expect_equal(w$violations, tibble::as_tibble(df))
 
-  e <- rlang::catch_cnd(expect_empty(df, abort_msg = "stop"), classes = "daos_check_failure")
+  e <- rlang::catch_cnd(expect_empty(df, abort_msg = "stop"), classes = "expectr_failure")
   expect_s3_class(e, "error")
   expect_equal(e$violations, tibble::as_tibble(df))
 })
@@ -97,9 +97,9 @@ test_that("expect_empty() logs success, warning and abort", {
   expect_match(lines[3], "| ✖ | Aborted | 1 row", fixed = TRUE)
 })
 
-test_that("log path is taken from the daos.check_log option", {
+test_that("log path is taken from the expectr.log option", {
   log <- withr::local_tempfile(fileext = ".log")
-  withr::local_options(daos.check_log = log)
+  withr::local_options(expectr.log = log)
   expect_empty(data.frame(), success_msg = "From option")
   expect_match(readLines(log, encoding = "UTF-8"), "From option")
 })

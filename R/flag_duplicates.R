@@ -28,7 +28,7 @@
 #'   expect_empty(warn_msg = "Duplicate rows found")
 #' }
 #'
-#' @seealso [daos::expect_empty()]
+#' @seealso [expect_unique()] to check a key, [expect_empty()]
 #'
 #' @importFrom cli cli_abort
 #' @importFrom dplyr select
